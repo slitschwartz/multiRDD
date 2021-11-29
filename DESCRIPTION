@@ -1,0 +1,22 @@
+Package: multiRDD
+Type: Package
+Title: Tools for Multi-Site RDD Estimation
+Version: 0.1.0
+Author: Sophie Litschwartz
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: What license is it under?
+Encoding: UTF-8
+LazyData: true
+Depends:
+    tidyverse,
+    lme4,
+    plm,
+    lmtest,
+    arm
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 7.1.2

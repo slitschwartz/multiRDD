@@ -1,0 +1,138 @@
+---
+title: "Demonstration of multiRDD package"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Demonstration of multiRDD package}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
+library(ggplot2)
+library(tidyverse)
+library( arm )
+library(multiRDD)
+
+```
+
+First load the library:
+
+```{r setup}
+library(multiRDD)
+```
+
+
+To illustrate we need a demonstration dataset.
+The `multiRDD` package includes some code to generate such data, whcih is useful for simulations, etc., as well.
+Generate data via the `gen.data()` method, as so:
+
+```{r}
+
+#par.sim<-c(0.7,0.3,0.05,0,0.07,0.07,0.025,0 ,0.4,1,1,0.2)
+par.sim<-data.frame(ao.m=.7,ao.sd=.3,bo.m=.05,bo.sd=.025,a1.m=.07,
+                  a1.sd=.07,b1.m=.025,b1.sd=.025,obs.se=.4,Rmean=1,hopt=1,ICCR=.2)
+par.sim
+
+#Data is generated using the following data generating functions 
+#Control
+#  Y0<-a0+b0*running
+#Treatment
+#Y1<-Y0+a1+b1*running
+#a0 is the intercept for the control
+#a1 is the change in the intercept for the treatment, (the treatment effect)
+#b0 is the relationship between outcome and the running variable for the control
+#b1 is the relationship between outcome and the running variable interacted with treatment
+  
+names<-c("a0","b0","a1","b1")
+means<-as.numeric(dplyr::select(par.sim,dplyr::contains(".m")))
+sds<-as.numeric(dplyr::select(par.sim,dplyr::contains(".sd")))
+parameters.reg<-data.frame(names,means,sds)
+  
+#these are the other parameters to generate the schools
+#ICCR : ICC of the running variable across schools
+#obs.se:Is the observation level standard error
+#Rmean: is the grand mean of the running variable is sd's away from the cut point 
+#hopt: is the bandwidth
+
+parameters.gen<-par.sim %>% 
+                dplyr::select(-dplyr::contains(".sd")) %>%  
+                dplyr::select(-dplyr::contains(".m"))
+parameters.gen
+
+sim.sample = gen.data( TC = 150, nmean = 130, 
+                       parameters.reg = parameters.reg,
+                       obs.se = parameters.gen$obs.se, Rmean = parameters.gen$Rmean )
+sim.sample <- sim.sample %>% dplyr::select(cl.id,running,Y)
+```
+
+The data we need are cluster IDs, the value of the running variable, and the outcome.
+The running variable is assumed to have been centered by cluster so 0 is the threshold value.
+
+```{r}
+head( sim.sample )
+```
+
+
+
+# Pre-process data (bandwidth subsetting)
+
+Before analysis, the data needs to be subset to be in bandwidth.
+We also recommend dropping small clusters as well, as they can be quite unstable (especially with respect to estimating standard errors for the meta analysis approach).
+
+```{r}
+df.test<-sim.sample %>% 
+    filter(running<1, running>-1) %>% 
+    mutate(cl.id=as.factor(cl.id)) %>%
+    group_by(cl.id) %>%
+    dplyr::mutate(inbwT=sum(running<0),inbwNT=sum(running>=0)) %>% 
+    filter(inbwNT>10 & inbwT>10) %>%
+    ungroup()
+df.test
+
+```
+
+# Analyze the data
+
+We have four methods for analysis.
+
+The LLR approach:
+
+```{r}
+
+reg.LLR(df.test,clusterid="cl.id",runvar = "running", outcomevar = "Y",less.than = TRUE)
+
+```
+
+
+The meta-analysis approach:
+```{r}
+
+reg.Meta(df.test,clusterid="cl.id",runvar = "running", outcomevar = "Y",less.than = TRUE)
+
+```
+
+The Restricted FIRC approach
+```{r}
+
+model = c("pool","pool","pp","up")
+names(model)=c("running","tr.rn","treat","intercept")
+
+reg.FIRC(df.test,clusterid="cl.id",runvar = "running", outcomevar = "Y",less.than = TRUE,model=model)
+
+```
+
+And the Unrestricted FIRC approach (the `reg.FIRC` method, depending on passed parameters, allows for different modeling approaches):
+
+```{r}
+model = c("pp","pp","pp","up")
+names(model)=c("running","tr.rn","treat","intercept")
+
+reg.FIRC(df.test,clusterid="cl.id",runvar = "running", outcomevar = "Y",less.than = TRUE,model=model)
+```
